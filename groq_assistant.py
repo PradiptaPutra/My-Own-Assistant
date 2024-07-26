@@ -231,13 +231,72 @@ def handle_pdf_analysis(file_path):
     except Exception as e:
         print(f"Error reading or analyzing PDF: {e}")
         return None
+    
+class CoreMemory:
+    def __init__(self, file_path='core_memory.json'):
+        self.file_path = file_path
+        self.memory = self.load_memory()
+
+    def load_memory(self):
+        try:
+            with open(self.file_path, 'r') as f:
+                return json.load(f)
+        except FileNotFoundError:
+            return {}
+
+    def save_memory(self):
+        with open(self.file_path, 'w') as f:
+            json.dump(self.memory, f, indent=2)
+
+    def update_memory(self, key, value):
+        self.memory[key] = value
+        self.save_memory()
+
+    def get_memory(self, key):
+        return self.memory.get(key)
+
+def initialize_user(core_memory):
+    name = input("What's your name? ")
+    core_memory.update_memory('user_name', name)
+    print(f"Nice to meet you, {name}! I'll remember you from now on.")
+
+def personalize_system_message(system_message, core_memory):
+    user_name = core_memory.get_memory('user_name')
+    if user_name:
+        system_message['content'] += f"\n\nYou are currently assisting {user_name}. Always personalize your responses for {user_name} based on previous interactions and preferences."
+
+def update_user_preferences(core_memory):
+    preference = input("Tell me something about yourself or your preferences: ")
+    preferences = core_memory.get_memory('preferences') or []
+    preferences.append({"date": datetime.now().isoformat(), "preference": preference})
+    core_memory.update_memory('preferences', preferences)
+    print("Thank you for sharing. I'll remember that about you.")
+
+def get_user_context(core_memory):
+    user_name = core_memory.get_memory('user_name')
+    preferences = core_memory.get_memory('preferences')
+    context = f"User Context:\nName: {user_name}\n"
+    if preferences:
+        context += "Preferences:\n"
+        for pref in preferences:
+            context += f"- {pref['preference']} (shared on {pref['date']})\n"
+    return context
 
 def main():
-    print("Welcome to the Advanced AI Assistant!")
+    print("Welcome to the Advanced AI Assistant with Core Memory!")
     print("Type 'load context' to load a previous conversation.")
     print("Type 'save context' to save the current conversation.")
     print("Type 'read pdf <file_path>' to read and analyze a PDF file.")
+    print("Type 'update preferences' to add personal information.")
+    print("Type 'show my info' to display your stored information.")
     print("Type 'exit' or 'quit' to end the session.")
+
+    core_memory = CoreMemory()
+
+    if not core_memory.get_memory('user_name'):
+        initialize_user(core_memory)
+
+    personalize_system_message(system_message, core_memory)
 
     messages = [system_message]
     current_context = None
@@ -273,7 +332,17 @@ def main():
                 messages.append({"role": "user", "content": f"I've read and analyzed a PDF. Here's the analysis:\n\n{analysis}\n\nCan you provide a concise summary of the main points and any key insights from this analysis?"})
                 response = get_completion(messages)
                 messages.append({"role": "assistant", "content": response})
+        elif question.lower() == "update preferences":
+            update_user_preferences(core_memory)
+            continue
+        elif question.lower() == "show my info":
+            print(get_user_context(core_memory))
+            continue
         else:
+            # Add user context to the message for better personalization
+            user_context = get_user_context(core_memory)
+            messages.append({"role": "system", "content": user_context})
+
             if should_search_academic(question):
                 academic_info = get_academic_info(question)
                 messages.append({"role": "system", "content": f"Recent academic information related to the user's query:\n\n{academic_info}"})
@@ -282,9 +351,8 @@ def main():
             response = get_completion(messages)
             messages.append({"role": "assistant", "content": response})
 
-        # Autosave setiap 5 pesan
+        # Autosave every 5 messages
         if len(messages) % 5 == 0:
             current_context = save_conversation_context(messages, current_context)
-
 if __name__ == '__main__':
     main()
