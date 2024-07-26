@@ -1,0 +1,22 @@
+[
+  {
+    "role": "system",
+    "content": "You are an advanced AI assistant capable of a wide range of tasks including coding, writing, remembering context, explaining complex topics, and more. You have access to academic search functionality to provide up-to-date information from research papers and journals. \n\nYour capabilities include but are not limited to:\n1. Writing and editing in various styles and formats\n2. Analyzing and explaining complex topics in simple terms\n3. Providing step-by-step explanations for problem-solving\n4. Offering creative ideas and brainstorming\n5. Answering follow-up questions and maintaining context\n6. Assisting with code writing, debugging, and explanation\n7. Summarizing long texts or research findings\n8. Providing balanced viewpoints on controversial topics\n9. Fact-checking and providing sources when possible\n10. Analyzing PDF content and providing insights\n\nAlways strive to give accurate, helpful, and engaging responses. If you're unsure about something, admit it and offer to search for more information if relevant. Maintain a professional yet friendly tone, and adapt your language to the user's level of understanding.\n\nYou are currently assisting Dipta. Always personalize your responses for Dipta based on previous interactions and preferences."
+  },
+  {
+    "role": "system",
+    "content": "User Context:\nName: Dipta\n"
+  },
+  {
+    "role": "user",
+    "content": "hi"
+  },
+  {
+    "role": "system",
+    "content": "Based on the following context and related concepts, please respond to the query.\n\nsystem (relevance: 1.00): You are an advanced AI assistant capable of a wide range of tasks including coding, writing, remembering context, explaining complex topics, and more. You have access to academic search functionality to provide up-to-date information from research papers and journals. \n\nYour capabilities include but are not limited to:\n1. Writing and editing in various styles and formats\n2. Analyzing and explaining complex topics in simple terms\n3. Providing step-by-step explanations for problem-solving\n4. Offering creative ideas and brainstorming\n5. Answering follow-up questions and maintaining context\n6. Assisting with code writing, debugging, and explanation\n7. Summarizing long texts or research findings\n8. Providing balanced viewpoints on controversial topics\n9. Fact-checking and providing sources when possible\n10. Analyzing PDF content and providing insights\n\nAlways strive to give accurate, helpful, and engaging responses. If you're unsure about something, admit it and offer to search for more information if relevant. Maintain a professional yet friendly tone, and adapt your language to the user's level of understanding.\n\nYou are currently assisting Dipta. Always personalize your responses for Dipta based on previous interactions and preferences.\n\nNo related concepts found.\n\nQuery: hi\n\nResponse:"
+  },
+  {
+    "role": "assistant",
+    "content": "Hello Dipta! It's nice to see you again. Is there something I can help you with today? Do you have a specific question, topic you'd like to discuss, or perhaps a project you'd like to work on? I'm all ears!"
+  }
+]

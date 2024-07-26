@@ -11,6 +11,15 @@ import sys
 from datetime import datetime
 import os
 
+import numpy as np
+from sklearn.metrics.pairwise import cosine_similarity
+from sentence_transformers import SentenceTransformer
+import networkx as nx
+
+# Initialize SentenceTransformer model for embeddings
+model = SentenceTransformer('all-MiniLM-L6-v2')
+os.environ["TOKENIZERS_PARALLELISM"] = "false"
+
 client = Groq()
 
 system_message = {
@@ -281,9 +290,110 @@ def get_user_context(core_memory):
         for pref in preferences:
             context += f"- {pref['preference']} (shared on {pref['date']})\n"
     return context
+class ContextualMemory:
+    def __init__(self, max_size=100):
+        self.memory = []
+        self.max_size = max_size
+        self.embeddings = []
+
+    def add(self, message):
+        if len(self.memory) >= self.max_size:
+            self.memory.pop(0)
+            self.embeddings.pop(0)
+        self.memory.append(message)
+        self.embeddings.append(model.encode(message['content']))
+
+    def get_relevant_context(self, query, top_k=5):
+        query_embedding = model.encode(query)
+        similarities = cosine_similarity([query_embedding], self.embeddings)[0]
+        top_indices = np.argsort(similarities)[-top_k:][::-1]
+        return [self.memory[i] for i in top_indices]
+
+class AttentionMechanism:
+    def __init__(self):
+        self.attention_weights = None
+
+    def compute_attention(self, query_embedding, context_embeddings):
+        similarities = cosine_similarity([query_embedding], context_embeddings)[0]
+        self.attention_weights = similarities / np.sum(similarities)
+        return self.attention_weights
+
+    def apply_attention(self, context, query):
+        query_embedding = model.encode(query)
+        context_embeddings = [model.encode(c['content']) for c in context]
+        attention_weights = self.compute_attention(query_embedding, context_embeddings)
+        weighted_context = []
+        for i, c in enumerate(context):
+            weighted_context.append({
+                'role': c['role'],
+                'content': c['content'],
+                'weight': attention_weights[i]
+            })
+        return weighted_context
+
+class KnowledgeGraph:
+    def __init__(self):
+        self.graph = nx.Graph()
+
+    def add_relationship(self, entity1, entity2, relationship):
+        self.graph.add_edge(entity1, entity2, relationship=relationship)
+
+    def get_related_entities(self, entity, max_depth=2):
+        if entity not in self.graph:
+            return []  # Return an empty list if the entity is not in the graph
+        related = set()
+        for depth in range(1, max_depth + 1):
+            neighbors = set(nx.single_source_shortest_path(self.graph, entity, cutoff=depth).keys())
+            related.update(neighbors)
+        return list(related - {entity})
+
+def update_knowledge_graph(knowledge_graph, message):
+    # This is a simple implementation. In a real-world scenario, you'd use NLP techniques
+    # to extract entities and relationships from the message.
+    words = message['content'].split()
+    for i in range(len(words) - 1):
+        knowledge_graph.add_relationship(words[i].lower(), words[i+1].lower(), "next_word")
+
+def get_completion_with_context(messages, contextual_memory, attention_mechanism, knowledge_graph):
+    query = messages[-1]['content']
+    relevant_context = contextual_memory.get_relevant_context(query)
+    
+    # Construct the prompt
+    prompt = "Based on the following context and related concepts, please respond to the query.\n\n"
+    
+    if relevant_context:
+        weighted_context = attention_mechanism.apply_attention(relevant_context, query)
+        for ctx in weighted_context:
+            prompt += f"{ctx['role']} (relevance: {ctx['weight']:.2f}): {ctx['content']}\n"
+    else:
+        prompt += "No relevant context available.\n"
+    
+    # Get related entities from knowledge graph
+    entities = query.split()
+    related_entities = set()
+    for entity in entities:
+        related_entities.update(knowledge_graph.get_related_entities(entity.lower()))
+    
+    if related_entities:
+        prompt += f"\nRelated concepts: {', '.join(related_entities)}\n\n"
+    else:
+        prompt += "\nNo related concepts found.\n\n"
+    
+    prompt += f"Query: {query}\n\nResponse:"
+
+    # Add the constructed prompt to the messages
+    messages.append({"role": "system", "content": prompt})
+
+    # Call the existing get_completion function
+    response = get_completion(messages)
+
+    # Update knowledge graph based on the response
+    update_knowledge_graph(knowledge_graph, {"role": "assistant", "content": response})
+
+    return response
 
 def main():
-    print("Welcome to the Advanced AI Assistant with Core Memory!")
+    print("Welcome to the Advanced AI Assistant with Contextual Understanding!")
     print("Type 'load context' to load a previous conversation.")
     print("Type 'save context' to save the current conversation.")
     print("Type 'read pdf <file_path>' to read and analyze a PDF file.")
@@ -292,6 +402,9 @@ def main():
     print("Type 'exit' or 'quit' to end the session.")
 
     core_memory = CoreMemory()
+    contextual_memory = ContextualMemory()
+    attention_mechanism = AttentionMechanism()
+    knowledge_graph = KnowledgeGraph()
 
     if not core_memory.get_memory('user_name'):
         initialize_user(core_memory)
@@ -299,6 +412,8 @@ def main():
     personalize_system_message(system_message, core_memory)
 
     messages = [system_message]
+    contextual_memory.add(system_message)  # Initialize contextual memory with system message
+    update_knowledge_graph(knowledge_graph, system_message)  # Initialize knowledge graph with system message
     current_context = None
 
     while True:
@@ -320,6 +435,10 @@ def main():
                     if 0 <= index < len(contexts):
                         messages = load_conversation_context(contexts[index])
                         current_context = contexts[index]
+                        # Rebuild contextual memory and knowledge graph from loaded context
+                        for msg in messages:
+                            contextual_memory.add(msg)
+                            update_knowledge_graph(knowledge_graph, msg)
                     else:
                         print("Invalid choice. Please try again.")
                 except ValueError:
@@ -330,8 +449,9 @@ def main():
             analysis = handle_pdf_analysis(file_path)
             if analysis:
                 messages.append({"role": "user", "content": f"I've read and analyzed a PDF. Here's the analysis:\n\n{analysis}\n\nCan you provide a concise summary of the main points and any key insights from this analysis?"})
-                response = get_completion(messages)
+                response = get_completion_with_context(messages, contextual_memory, attention_mechanism, knowledge_graph)
                 messages.append({"role": "assistant", "content": response})
+                contextual_memory.add({"role": "assistant", "content": response})
         elif question.lower() == "update preferences":
             update_user_preferences(core_memory)
             continue
@@ -339,7 +459,6 @@ def main():
             print(get_user_context(core_memory))
             continue
         else:
-            # Add user context to the message for better personalization
             user_context = get_user_context(core_memory)
             messages.append({"role": "system", "content": user_context})
 
@@ -348,11 +467,14 @@ def main():
                 messages.append({"role": "system", "content": f"Recent academic information related to the user's query:\n\n{academic_info}"})
             
             messages.append({"role": "user", "content": question})
-            response = get_completion(messages)
+            response = get_completion_with_context(messages, contextual_memory, attention_mechanism, knowledge_graph)
             messages.append({"role": "assistant", "content": response})
+            contextual_memory.add({"role": "user", "content": question})
+            contextual_memory.add({"role": "assistant", "content": response})
 
         # Autosave every 5 messages
         if len(messages) % 5 == 0:
             current_context = save_conversation_context(messages, current_context)
+
 if __name__ == '__main__':
     main()
